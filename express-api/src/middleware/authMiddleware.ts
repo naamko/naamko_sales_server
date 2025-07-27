@@ -85,7 +85,11 @@ function authMiddleware(req: Request, res: Response, next: NextFunction): void {
     // Create the signature string: METHOD|PATH|BODY|TIMESTAMP|APP_ID
     const method = req.method;
     const path = req.path;
-    const body = req.rawBody ? req.rawBody.toString() : '';
+
+    // For multipart requests, use empty body for signature calculation
+    const contentType = req.headers['content-type'] || '';
+    const body = contentType.includes('multipart/form-data') ? '' : (req.rawBody ? req.rawBody.toString() : '');
+
     const signatureString = `${method}|${path}|${body}|${timestamp}|${appId}`;
 
     // DEBUG LOGGING
