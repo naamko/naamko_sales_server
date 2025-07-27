@@ -1,0 +1,87 @@
+version: "3.8"
+
+services:
+  # PostgreSQL Service
+  postgres:
+    image: postgres:15
+    container_name: naamko_sales_postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: location_reports_secure_password_2025
+      POSTGRES_DB: location_reports
+    ports:
+      - "5432:5432"
+    networks:
+      app-network:
+        aliases:
+          - postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # Express API Service
+  express-api:
+    build:
+      context: .
+    container_name: naamko_sales_express_api
+    restart: always
+    ports:
+      - "3000:3000"
+      - "5555:5555"
+    depends_on:
+      - postgres
+    environment:
+      DB_USER: postgres
+      DB_PASSWORD: location_reports_secure_password_2025
+      DB_NAME: location_reports
+      DATABASE_URL: "postgresql://postgres:location_reports_secure_password_2025@postgres:5432/location_reports"
+      JWT_SECRET: your_super_secure_jwt_secret_key
+      NODE_ENV: development
+      BASE_PATH: "/api"
+      HMAC_SECRET: your_super_secret_hmac_key_make_it_very_long_and_random_123456789
+      APP_ID: naamko-location-app
+    networks:
+      app-network:
+        aliases:
+          - express-api
+    volumes:
+      - ./express-api:/app
+      - node_modules:/app/node_modules
+      - uploads_data:/app/uploads
+    command: >
+      sh -c "
+      npm install express @types/express typescript ts-node ts-node-dev @types/pg @types/multer @types/cors @types/uuid @types/jsonwebtoken @types/bcryptjs swagger-jsdoc @types/swagger-jsdoc swagger-ui-express @types/swagger-ui-express nodemon jsonwebtoken cors bcryptjs multer pg dotenv exceljs uuid helmet express-rate-limit &&
+      mkdir -p /app/uploads &&
+      mkdir -p /app/src &&
+      if [ ! -f tsconfig.json ]; then echo '{\"compilerOptions\":{\"target\":\"ES2020\",\"module\":\"commonjs\",\"outDir\":\"./dist\",\"rootDir\":\"./src\",\"strict\":true,\"esModuleInterop\":true,\"skipLibCheck\":true,\"forceConsistentCasingInFileNames\":true},\"include\":[\"src/**/*\"],\"exclude\":[\"node_modules\",\"dist\"]}' > tsconfig.json; fi &&
+      if [ ! -f package.json ]; then echo '{\"name\":\"naamko-sales-api\",\"version\":\"1.0.0\",\"description\":\"Naamko Sales API\",\"main\":\"dist/server.js\",\"scripts\":{\"start\":\"node dist/server.js\",\"dev\":\"ts-node-dev --respawn --transpile-only src/server.ts\",\"build\":\"tsc\",\"watch\":\"tsc --watch\"},\"keywords\":[],\"author\":\"\",\"license\":\"ISC\"}' > package.json; fi &&
+      if [ ! -f src/server.ts ]; then echo 'import express from \"express\"; import cors from \"cors\"; import dotenv from \"dotenv\"; dotenv.config(); const app = express(); const PORT = process.env.PORT || 3000; app.use(cors()); app.use(express.json()); app.get(\"/api/health\", (req, res) => { res.json({ status: \"OK\", timestamp: new Date().toISOString() }); }); app.listen(PORT, () => { console.log(\\`🚀 Server running on port \\${PORT}\\`); });' > src/server.ts; fi &&
+      npm run dev
+      "
+
+  # Nginx Service
+  nginx:
+    image: nginx:alpine
+    container_name: naamko_sales_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/conf/default.conf:/etc/nginx/conf.d/default.conf
+      - uploads_data:/app/uploads:ro
+    depends_on:
+      - express-api
+    networks:
+      app-network:
+        aliases:
+          - nginx
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  node_modules:
+  postgres_data:
+  uploads_data:
+
