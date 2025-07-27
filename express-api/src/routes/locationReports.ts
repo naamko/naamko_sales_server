@@ -8,10 +8,30 @@ import { ExcelService } from '../services/excelService';
 const router = express.Router();
 const excelService = new ExcelService();
 
-// Apply signing middleware to all location-related routes
+// Public route - GET /reports/export/excel (no auth required)
+router.get('/export/excel', async (req: Request, res: Response) => {
+    try {
+        console.log('📊 Generating Excel export for all location reports...');
+        const excelBuffer = await excelService.generateLocationReportsExcel();
+        const filename = `location-reports-${new Date().toISOString().split('T')[0]}.xlsx`;
+
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Length', excelBuffer.length);
+        res.send(excelBuffer);
+    } catch (error) {
+        console.error('Error generating Excel export:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to generate Excel export',
+        });
+    }
+});
+
+// Apply signing
 router.use(authMiddleware);
 
-// POST /location-reports
+// POST /location-reports (auth required)
 router.post(
     '/',
     uploadSingle,
@@ -93,25 +113,4 @@ router.post(
     }
 );
 
-// GET /reports/export/excel
-router.get('/export/excel', async (req: Request, res: Response) => {
-    try {
-        console.log('📊 Generating Excel export for all location reports...');
-        const excelBuffer = await excelService.generateLocationReportsExcel();
-        const filename = `location-reports-${new Date().toISOString().split('T')[0]}.xlsx`;
-
-        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-        res.setHeader('Content-Length', excelBuffer.length);
-        res.send(excelBuffer);
-    } catch (error) {
-        console.error('Error generating Excel export:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to generate Excel export',
-        });
-    }
-});
-
 export default router;
-
