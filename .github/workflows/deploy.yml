@@ -1,0 +1,160 @@
+name: Build, Push, and Deploy Backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_express_api:
+        description: "Rebuild Express API?"
+        required: true
+        default: true
+        type: boolean
+      build_postgres:
+        description: "Rebuild Postgres?"
+        required: true
+        default: false
+        type: boolean
+      deploy:
+        description: "Deploy after building?"
+        required: true
+        default: true
+        type: boolean
+
+env:
+  IMAGE_TAG: ${{ github.sha }}-${{ github.run_number }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.build_express_api == 'true' || github.event.inputs.build_postgres == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Clear Docker cache
+        run: docker builder prune -af
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Write express-api.Dockerfile
+        if: ${{ github.event.inputs.build_express_api == 'true' }}
+        run: |
+          cat > express-api.Dockerfile <<'DOCKER'
+          FROM node:23-alpine
+          WORKDIR /app
+          COPY express-api/package*.json ./
+          RUN npm ci --omit=dev
+          COPY express-api/ ./
+          RUN mkdir -p /app/uploads && chmod 777 /app/uploads
+          ENV NODE_ENV=production
+          EXPOSE 3000
+          CMD ["node","src/server.js"]
+          DOCKER
+
+      - name: Build & push Express API
+        if: ${{ github.event.inputs.build_express_api == 'true' }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./express-api.Dockerfile
+          push: true
+          no-cache: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/naamko:express-api
+            ${{ secrets.DOCKERHUB_USERNAME }}/naamko:express-api-${{ env.IMAGE_TAG }}
+
+      - name: Tag & push Postgres 15
+        if: ${{ github.event.inputs.build_postgres == 'true' }}
+        run: |
+          docker pull postgres:15
+          docker tag postgres:15 ${{ secrets.DOCKERHUB_USERNAME }}/naamko:postgres
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/naamko:postgres
+
+  deploy:
+    if: ${{ github.event.inputs.deploy == 'true' }}
+    needs: [build-and-push]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
+
+      - name: Prepare deploy bundle
+        run: |
+          mkdir -p deploy
+
+          cat > deploy/docker-compose.yml <<'COMPOSE'
+          services:
+            postgres:
+              image: ${{ secrets.DOCKERHUB_USERNAME }}/naamko:postgres
+              restart: always
+              environment:
+                POSTGRES_USER: ${DB_USER}
+                POSTGRES_PASSWORD: ${DB_PASSWORD}
+                POSTGRES_DB: ${DB_NAME}
+              volumes:
+                - postgres_data:/var/lib/postgresql/data
+
+            express-api:
+              image: ${{ secrets.DOCKERHUB_USERNAME }}/naamko:express-api
+              restart: unless-stopped
+              depends_on:
+                - postgres
+              ports:
+                - "3000:3000"
+              environment:
+                DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}"
+                HMAC_SECRET: ${HMAC_SECRET}
+                APP_ID: ${APP_ID}
+                NODE_ENV: production
+              volumes:
+                - ./uploads:/app/uploads
+
+            nginx:
+              image: nginx:alpine
+              restart: unless-stopped
+              ports:
+                - "80:80"
+              volumes:
+                - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+                - ./uploads:/app/uploads:ro
+              depends_on:
+                - express-api
+
+          volumes:
+            postgres_data:
+          COMPOSE
+
+          cat > deploy/.env <<EOF
+          DB_USER=postgres
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_NAME=location_reports
+          HMAC_SECRET=${{ secrets.HMAC_SECRET }}
+          APP_ID=${{ secrets.APP_ID }}
+          EOF
+
+          echo '#!/usr/bin/env bash' > deploy/docker-login.sh
+          echo "echo \"${{ secrets.DOCKERHUB_TOKEN }}\" | docker login --username ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin" >> deploy/docker-login.sh
+          chmod +x deploy/docker-login.sh
+
+      - name: Deploy to Droplet via password
+        env:
+          SSHPASS: ${{ secrets.DIGITALOCEAN_PASSWORD }}
+        run: |
+          sshpass -e ssh -o StrictHostKeyChecking=no root@${{ secrets.DIGITALOCEAN_IP }} "mkdir -p /opt/app/uploads"
+          sshpass -e scp -o StrictHostKeyChecking=no deploy/docker-compose.yml deploy/.env deploy/docker-login.sh root@${{ secrets.DIGITALOCEAN_IP }}:/opt/app/
+
+          sshpass -e ssh -o StrictHostKeyChecking=no root@${{ secrets.DIGITALOCEAN_IP }} <<'REMOTE'
+            set -e
+            cd /opt/app
+            chmod +x docker-login.sh && ./docker-login.sh
+            docker compose pull
+            docker compose down --remove-orphans || true
+            docker system prune -af
+            docker compose up -d --force-recreate
+          REMOTE
+
