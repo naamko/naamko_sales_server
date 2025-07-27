@@ -16,13 +16,10 @@ export const captureRawBody = (req: Request, res: Response, next: NextFunction):
     if (req.method === 'GET' || req.path === '/api/health') {
         return next();
     }
-
     let data = Buffer.alloc(0);
-
     req.on('data', (chunk: Buffer) => {
         data = Buffer.concat([data, chunk]);
     });
-
     req.on('end', () => {
         req.rawBody = data;
         next();
@@ -66,7 +63,6 @@ function authMiddleware(req: Request, res: Response, next: NextFunction): void {
 
     // Get the secret key from environment
     const secretKey = process.env.HMAC_SECRET;
-
     if (!secretKey) {
         console.error("HMAC_SECRET environment variable is not set");
         res.status(500).json({
@@ -90,8 +86,18 @@ function authMiddleware(req: Request, res: Response, next: NextFunction): void {
     const method = req.method;
     const path = req.path;
     const body = req.rawBody ? req.rawBody.toString() : '';
-
     const signatureString = `${method}|${path}|${body}|${timestamp}|${appId}`;
+
+    // DEBUG LOGGING
+    console.log('=== SIGNATURE DEBUG ===');
+    console.log('Method:', method);
+    console.log('Path:', path);
+    console.log('Body length:', body.length);
+    console.log('Body content:', JSON.stringify(body.substring(0, 200)));
+    console.log('Timestamp:', timestamp);
+    console.log('App ID:', appId);
+    console.log('Signature string:', signatureString);
+    console.log('Secret key length:', secretKey.length);
 
     // Calculate expected signature
     const expectedSignature = crypto
@@ -99,11 +105,14 @@ function authMiddleware(req: Request, res: Response, next: NextFunction): void {
         .update(signatureString)
         .digest('hex');
 
+    console.log('Expected signature:', expectedSignature);
+    console.log('Received signature:', signature);
+    console.log('======================');
+
     // Compare signatures using timing-safe comparison
     try {
         const providedBuffer = Buffer.from(signature, 'hex');
         const expectedBuffer = Buffer.from(expectedSignature, 'hex');
-
         if (providedBuffer.length !== expectedBuffer.length ||
             !crypto.timingSafeEqual(providedBuffer, expectedBuffer)) {
             res.status(401).json({
