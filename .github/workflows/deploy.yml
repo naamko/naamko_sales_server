@@ -120,7 +120,7 @@ jobs:
               ports:
                 - "80:80"
               volumes:
-                - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+                - ./nginx/conf/default.conf:/etc/nginx/conf.d/default.conf:ro
                 - ./uploads:/app/uploads:ro
               depends_on:
                 - express-api
@@ -145,8 +145,9 @@ jobs:
         env:
           SSHPASS: ${{ secrets.DIGITALOCEAN_PASSWORD }}
         run: |
-          sshpass -e ssh -o StrictHostKeyChecking=no root@${{ secrets.DIGITALOCEAN_IP }} "mkdir -p /opt/app/uploads"
+          sshpass -e ssh -o StrictHostKeyChecking=no root@${{ secrets.DIGITALOCEAN_IP }} "mkdir -p /opt/app/uploads /opt/app/nginx/conf"
           sshpass -e scp -o StrictHostKeyChecking=no deploy/docker-compose.yml deploy/.env deploy/docker-login.sh root@${{ secrets.DIGITALOCEAN_IP }}:/opt/app/
+          sshpass -e scp -o StrictHostKeyChecking=no nginx/conf/default.conf root@${{ secrets.DIGITALOCEAN_IP }}:/opt/app/nginx/conf/
 
           sshpass -e ssh -o StrictHostKeyChecking=no root@${{ secrets.DIGITALOCEAN_IP }} <<'REMOTE'
             set -e
@@ -157,4 +158,3 @@ jobs:
             docker system prune -af
             docker compose up -d --force-recreate
           REMOTE
-
