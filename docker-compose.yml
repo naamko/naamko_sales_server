@@ -6,9 +6,9 @@ services:
     container_name: naamko_sales_postgres_db
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: location_reports_secure_password_2025
-      POSTGRES_DB: location_reports
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-location_reports_secure_password_2025}
+      POSTGRES_DB: ${DB_NAME:-location_reports}
     ports:
       - "5432:5432"
     networks:
@@ -31,15 +31,15 @@ services:
     depends_on:
       - postgres
     environment:
-      DB_USER: postgres
-      DB_PASSWORD: location_reports_secure_password_2025
-      DB_NAME: location_reports
-      DATABASE_URL: "postgresql://postgres:location_reports_secure_password_2025@postgres:5432/location_reports"
-      JWT_SECRET: your_super_secure_jwt_secret_key
-      NODE_ENV: development
-      BASE_PATH: "/api"
-      HMAC_SECRET: your_super_secret_hmac_key_make_it_very_long_and_random_123456789
-      APP_ID: naamko-location-app
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-location_reports_secure_password_2025}
+      DB_NAME: ${DB_NAME:-location_reports}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:location_reports_secure_password_2025@postgres:5432/location_reports}
+      JWT_SECRET: ${JWT_SECRET:-your_super_secure_jwt_secret_key}
+      NODE_ENV: ${NODE_ENV:-development}
+      BASE_PATH: ${BASE_PATH:-/api}
+      HMAC_SECRET: ${HMAC_SECRET:-your_super_secret_hmac_key_make_it_very_long_and_random_123456789}
+      APP_ID: ${APP_ID:-naamko-location-app}
     networks:
       app-network:
         aliases:
