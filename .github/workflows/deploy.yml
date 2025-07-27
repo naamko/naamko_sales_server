@@ -39,27 +39,12 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Write express-api.Dockerfile
-        if: ${{ github.event.inputs.build_express_api == 'true' }}
-        run: |
-          cat > express-api.Dockerfile <<'DOCKER'
-          FROM node:23-alpine
-          WORKDIR /app
-          COPY express-api/package*.json ./
-          RUN npm ci --omit=dev
-          COPY express-api/ ./
-          RUN mkdir -p /app/uploads && chmod 777 /app/uploads
-          ENV NODE_ENV=production
-          EXPOSE 3000
-          CMD ["node","src/server.js"]
-          DOCKER
-
       - name: Build & push Express API
         if: ${{ github.event.inputs.build_express_api == 'true' }}
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: ./express-api.Dockerfile
+          context: ./express-api
+          file: ./express-api/Dockerfile
           push: true
           no-cache: true
           tags: |
