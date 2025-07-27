@@ -43,8 +43,8 @@ jobs:
         if: ${{ github.event.inputs.build_express_api == 'true' }}
         uses: docker/build-push-action@v5
         with:
-          context: ./express-api
-          file: ./express-api/Dockerfile
+          context: .
+          file: ./Dockerfile
           push: true
           no-cache: true
           tags: |
