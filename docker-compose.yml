@@ -1,5 +1,4 @@
 version: "3.8"
-
 services:
   # PostgreSQL Service
   postgres:
@@ -22,7 +21,8 @@ services:
   # Express API Service
   express-api:
     build:
-      context: .
+      context: ./express-api
+      dockerfile: Dockerfile
     container_name: naamko_sales_express_api
     restart: always
     ports:
@@ -45,19 +45,7 @@ services:
         aliases:
           - express-api
     volumes:
-      - ./express-api:/app
-      - node_modules:/app/node_modules
       - uploads_data:/app/uploads
-    command: >
-      sh -c "
-      npm install express @types/express typescript ts-node ts-node-dev @types/pg @types/multer @types/cors @types/uuid @types/jsonwebtoken @types/bcryptjs swagger-jsdoc @types/swagger-jsdoc swagger-ui-express @types/swagger-ui-express nodemon jsonwebtoken cors bcryptjs multer pg dotenv exceljs uuid helmet express-rate-limit &&
-      mkdir -p /app/uploads &&
-      mkdir -p /app/src &&
-      if [ ! -f tsconfig.json ]; then echo '{\"compilerOptions\":{\"target\":\"ES2020\",\"module\":\"commonjs\",\"outDir\":\"./dist\",\"rootDir\":\"./src\",\"strict\":true,\"esModuleInterop\":true,\"skipLibCheck\":true,\"forceConsistentCasingInFileNames\":true},\"include\":[\"src/**/*\"],\"exclude\":[\"node_modules\",\"dist\"]}' > tsconfig.json; fi &&
-      if [ ! -f package.json ]; then echo '{\"name\":\"naamko-sales-api\",\"version\":\"1.0.0\",\"description\":\"Naamko Sales API\",\"main\":\"dist/server.js\",\"scripts\":{\"start\":\"node dist/server.js\",\"dev\":\"ts-node-dev --respawn --transpile-only src/server.ts\",\"build\":\"tsc\",\"watch\":\"tsc --watch\"},\"keywords\":[],\"author\":\"\",\"license\":\"ISC\"}' > package.json; fi &&
-      if [ ! -f src/server.ts ]; then echo 'import express from \"express\"; import cors from \"cors\"; import dotenv from \"dotenv\"; dotenv.config(); const app = express(); const PORT = process.env.PORT || 3000; app.use(cors()); app.use(express.json()); app.get(\"/api/health\", (req, res) => { res.json({ status: \"OK\", timestamp: new Date().toISOString() }); }); app.listen(PORT, () => { console.log(\\`🚀 Server running on port \\${PORT}\\`); });' > src/server.ts; fi &&
-      npm run dev
-      "
 
   # Nginx Service
   nginx:
@@ -81,7 +69,5 @@ networks:
     driver: bridge
 
 volumes:
-  node_modules:
   postgres_data:
   uploads_data:
-
