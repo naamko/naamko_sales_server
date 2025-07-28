@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import { db } from '../database/connection';
 import { uploadSingle, handleUploadError } from '../middleware/uploadMiddleware';
@@ -28,16 +28,29 @@ router.get('/export/excel', async (req: Request, res: Response) => {
     }
 });
 
-// Apply signing
+// Apply signing middleware to POST routes only
 router.use(authMiddleware);
 
 // POST /location-reports (auth required)
 router.post(
     '/',
+    (req: Request, res: Response, next: NextFunction) => {
+        console.log('=== BEFORE UPLOAD MIDDLEWARE ===');
+        console.log('Content-Type:', req.headers['content-type']);
+        console.log('Content-Length:', req.headers['content-length']);
+        console.log('================================');
+        next();
+    },
     uploadSingle,
     handleUploadError,
     async (req: Request, res: Response) => {
         try {
+            console.log('=== LOCATION REPORT DEBUG ===');
+            console.log('Request body:', req.body);
+            console.log('Request file:', req.file);
+            console.log('Content-Type:', req.headers['content-type']);
+            console.log('==============================');
+
             const {
                 employeeName,
                 locationName,
