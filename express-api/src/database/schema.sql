@@ -5,17 +5,17 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS location_reports (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     location_id VARCHAR(6) UNIQUE NOT NULL,
-    employee_name VARCHAR(255) NOT NULL,
-    location_name VARCHAR(255) NOT NULL,
+    employee_name TEXT NOT NULL,
+    location_name TEXT NOT NULL,
     location_type VARCHAR(100) NOT NULL,
-    latitude DECIMAL(10, 8) NOT NULL,
-    longitude DECIMAL(11, 8) NOT NULL,
+    latitude DOUBLE PRECISION NOT NULL,
+    longitude DOUBLE PRECISION NOT NULL,
     timestamp TIMESTAMP NOT NULL,
-    image_url VARCHAR(500),
+    image_url TEXT,
     image_size_kb DECIMAL(10, 2),
     image_format VARCHAR(10),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Create indexes for better performance
@@ -26,12 +26,12 @@ CREATE INDEX IF NOT EXISTS idx_location_reports_location_type ON location_report
 
 -- Create trigger function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $
+RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = CURRENT_TIMESTAMP;
     RETURN NEW;
 END;
-$ language 'plpgsql';
+$$ LANGUAGE plpgsql;
 
 -- Drop existing trigger if it exists
 DROP TRIGGER IF EXISTS update_location_reports_updated_at ON location_reports;
