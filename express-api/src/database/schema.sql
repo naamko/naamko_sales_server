@@ -26,12 +26,15 @@ CREATE INDEX IF NOT EXISTS idx_location_reports_location_type ON location_report
 
 -- Create trigger function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER AS $
 BEGIN
     NEW.updated_at = CURRENT_TIMESTAMP;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$ LANGUAGE plpgsql;
+
+-- Drop existing trigger if it exists
+DROP TRIGGER IF EXISTS update_location_reports_updated_at ON location_reports;
 
 -- Create trigger
 CREATE TRIGGER update_location_reports_updated_at
