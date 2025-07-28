@@ -1,12 +1,8 @@
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Drop existing table and recreate with new structure
--- WARNING: This will delete all existing data
-DROP TABLE IF EXISTS location_reports CASCADE;
-
--- Location Reports Table (with new structure)
-CREATE TABLE location_reports (
+-- Location Reports Table (production-safe)
+CREATE TABLE IF NOT EXISTS location_reports (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     location_id VARCHAR(6) UNIQUE NOT NULL,
     employee_name TEXT NOT NULL,
@@ -22,11 +18,11 @@ CREATE TABLE location_reports (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create indexes for better performance
-CREATE INDEX idx_location_reports_location_id ON location_reports(location_id);
-CREATE INDEX idx_location_reports_employee_name ON location_reports(employee_name);
-CREATE INDEX idx_location_reports_timestamp ON location_reports(timestamp DESC);
-CREATE INDEX idx_location_reports_location_type ON location_reports(location_type);
+-- Create indexes for better performance (only if they don't exist)
+CREATE INDEX IF NOT EXISTS idx_location_reports_location_id ON location_reports(location_id);
+CREATE INDEX IF NOT EXISTS idx_location_reports_employee_name ON location_reports(employee_name);
+CREATE INDEX IF NOT EXISTS idx_location_reports_timestamp ON location_reports(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_location_reports_location_type ON location_reports(location_type);
 
 -- Create trigger function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
