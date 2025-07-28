@@ -1,31 +1,62 @@
-import express, { Request, Response, NextFunction } from 'express';
-import path from 'path';
-import { db } from '../database/connection';
-import { uploadSingle, handleUploadError } from '../middleware/uploadMiddleware';
-import authMiddleware from '../middleware/authMiddleware';
-import { ExcelService } from '../services/excelService';
+import express, { Request, Response, NextFunction } from "express";
+import path from "path";
+import { customAlphabet } from "nanoid";
+import { db } from "../database/connection";
+import {
+  uploadSingle,
+  handleUploadError,
+} from "../middleware/uploadMiddleware";
+import authMiddleware from "../middleware/authMiddleware";
+import { ExcelService } from "../services/excelService";
 
 const router = express.Router();
 const excelService = new ExcelService();
 
-// Public route - GET /reports/export/excel (no auth required)
-router.get('/export/excel', async (req: Request, res: Response) => {
-    try {
-        console.log('📊 Generating Excel export for all location reports...');
-        const excelBuffer = await excelService.generateLocationReportsExcel();
-        const filename = `location-reports-${new Date().toISOString().split('T')[0]}.xlsx`;
+// Generate 6-character alphanumeric UID using nanoid
+const generateLocationId = customAlphabet(
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+  6
+);
 
-        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-        res.setHeader('Content-Length', excelBuffer.length);
-        res.send(excelBuffer);
-    } catch (error) {
-        console.error('Error generating Excel export:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to generate Excel export',
-        });
-    }
+// Helper function to check if location_id already exists and generate unique one
+async function generateUniqueLocationId(): Promise<string> {
+  let locationId: string;
+  let exists = true;
+
+  while (exists) {
+    locationId = generateLocationId();
+    const checkQuery =
+      "SELECT location_id FROM location_reports WHERE location_id = $1";
+    const result = await db.query(checkQuery, [locationId]);
+    exists = result.rows.length > 0;
+  }
+
+  return locationId!;
+}
+
+// Public route - GET /reports/export/excel (no auth required)
+router.get("/export/excel", async (req: Request, res: Response) => {
+  try {
+    console.log("📊 Generating Excel export for all location reports...");
+    const excelBuffer = await excelService.generateLocationReportsExcel();
+    const filename = `location-reports-${
+      new Date().toISOString().split("T")[0]
+    }.xlsx`;
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Length", excelBuffer.length);
+    res.send(excelBuffer);
+  } catch (error) {
+    console.error("Error generating Excel export:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to generate Excel export",
+    });
+  }
 });
 
 // Apply signing middleware to POST routes only
@@ -33,97 +64,124 @@ router.use(authMiddleware);
 
 // POST /location-reports (auth required)
 router.post(
-    '/',
-    (req: Request, res: Response, next: NextFunction) => {
-        console.log('=== BEFORE UPLOAD MIDDLEWARE ===');
-        console.log('Content-Type:', req.headers['content-type']);
-        console.log('Content-Length:', req.headers['content-length']);
-        console.log('================================');
-        next();
-    },
-    uploadSingle,
-    handleUploadError,
-    async (req: Request, res: Response) => {
-        try {
-            console.log('=== LOCATION REPORT DEBUG ===');
-            console.log('Request body:', req.body);
-            console.log('Request file:', req.file);
-            console.log('Content-Type:', req.headers['content-type']);
-            console.log('==============================');
+  "/",
+  (req: Request, res: Response, next: NextFunction) => {
+    console.log("=== BEFORE UPLOAD MIDDLEWARE ===");
+    console.log("Content-Type:", req.headers["content-type"]);
+    console.log("Content-Length:", req.headers["content-length"]);
+    console.log("================================");
+    next();
+  },
+  uploadSingle,
+  handleUploadError,
+  async (req: Request, res: Response) => {
+    try {
+      console.log("=== LOCATION REPORT DEBUG ===");
+      console.log("Request body:", req.body);
+      console.log("Request file:", req.file);
+      console.log("Content-Type:", req.headers["content-type"]);
+      console.log("==============================");
 
-            const {
-                employeeName,
-                locationName,
-                locationType,
-                latitude,
-                longitude,
-                timestamp,
-            } = req.body;
+      const {
+        employeeName,
+        locationName,
+        locationType,
+        latitude,
+        longitude,
+        timestamp,
+      } = req.body;
 
-            if (!employeeName || !locationName || !locationType || !latitude || !longitude || !timestamp) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'Missing required fields: employeeName, locationName, locationType, latitude, longitude, timestamp',
-                });
-            }
+      if (
+        !employeeName ||
+        !locationName ||
+        !locationType ||
+        !latitude ||
+        !longitude ||
+        !timestamp
+      ) {
+        return res.status(400).json({
+          success: false,
+          error:
+            "Missing required fields: employeeName, locationName, locationType, latitude, longitude, timestamp",
+        });
+      }
 
-            let imageUrl: string | null = null;
-            let imageSizeKb: number | null = null;
-            let imageFormat: string | null = null;
+      // Generate unique location_id using nanoid
+      const locationId = await generateUniqueLocationId();
+      console.log("Generated location_id:", locationId);
 
-            if (req.file) {
-                imageUrl = `/uploads/${req.file.filename}`;
-                imageSizeKb = +(req.file.size / 1024).toFixed(2);
-                imageFormat = path.extname(req.file.originalname).slice(1).toLowerCase();
-            }
+      let imageUrl: string | null = null;
+      let imageSizeKb: number | null = null;
+      let imageFormat: string | null = null;
 
-            const query = `
-        INSERT INTO location_reports 
-        (employee_name, location_name, location_type, latitude, longitude, timestamp, image_url, image_size_kb, image_format)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        RETURNING *
-      `;
+      if (req.file) {
+        // Get original file extension
+        const originalExt = path.extname(req.file.originalname).toLowerCase();
 
-            const values = [
-                employeeName,
-                locationName,
-                locationType,
-                parseFloat(latitude),
-                parseFloat(longitude),
-                new Date(timestamp),
-                imageUrl,
-                imageSizeKb,
-                imageFormat,
-            ];
+        // Rename file to use location_id
+        const fs = require("fs");
+        const oldPath = req.file.path;
+        const newFilename = `${locationId}${originalExt}`;
+        const newPath = path.join(path.dirname(oldPath), newFilename);
 
-            const result = await db.query(query, values);
-            const locationReport = result.rows[0];
+        // Rename the file
+        fs.renameSync(oldPath, newPath);
+        console.log(`File renamed from ${req.file.filename} to ${newFilename}`);
 
-            res.status(201).json({
-                success: true,
-                data: {
-                    id: locationReport.id,
-                    employeeName: locationReport.employee_name,
-                    locationName: locationReport.location_name,
-                    locationType: locationReport.location_type,
-                    latitude: parseFloat(locationReport.latitude),
-                    longitude: parseFloat(locationReport.longitude),
-                    timestamp: locationReport.timestamp,
-                    imageUrl: locationReport.image_url,
-                    imageSizeKb: locationReport.image_size_kb,
-                    imageFormat: locationReport.image_format,
-                    createdAt: locationReport.created_at,
-                },
-                message: 'Location report created successfully',
-            });
-        } catch (error) {
-            console.error('Error creating location report:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Failed to create location report',
-            });
-        }
+        imageUrl = `/uploads/${newFilename}`;
+        imageSizeKb = +(req.file.size / 1024).toFixed(2);
+        imageFormat = originalExt.slice(1); // Remove the dot
+      }
+
+      const query = `
+                INSERT INTO location_reports 
+                (location_id, employee_name, location_name, location_type, latitude, longitude, timestamp, image_url, image_size_kb, image_format)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                RETURNING *
+            `;
+
+      const values = [
+        locationId,
+        employeeName,
+        locationName,
+        locationType,
+        parseFloat(latitude),
+        parseFloat(longitude),
+        new Date(timestamp),
+        imageUrl,
+        imageSizeKb,
+        imageFormat,
+      ];
+
+      const result = await db.query(query, values);
+      const locationReport = result.rows[0];
+
+      res.status(201).json({
+        success: true,
+        data: {
+          id: locationReport.id,
+          locationId: locationReport.location_id,
+          employeeName: locationReport.employee_name,
+          locationName: locationReport.location_name,
+          locationType: locationReport.location_type,
+          latitude: parseFloat(locationReport.latitude),
+          longitude: parseFloat(locationReport.longitude),
+          timestamp: locationReport.timestamp,
+          imageUrl: locationReport.image_url,
+          imageSizeKb: locationReport.image_size_kb,
+          imageFormat: locationReport.image_format,
+          createdAt: locationReport.created_at,
+        },
+        message: "Location report created successfully",
+      });
+    } catch (error) {
+      console.error("Error creating location report:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to create location report",
+      });
     }
+  }
 );
 
 export default router;
