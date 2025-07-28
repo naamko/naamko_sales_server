@@ -12,11 +12,12 @@ class Database {
       database: process.env.DB_NAME,
       password: process.env.DB_PASSWORD,
       port: 5432,
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
+      max: 20, // Maximum number of clients in the pool
+      idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+      connectionTimeoutMillis: 2000, // Return an error after 2 seconds if connection could not be established
     });
 
+    // Handle pool errors
     this.pool.on("error", (err) => {
       console.error("Unexpected error on idle client", err);
       process.exit(-1);
@@ -59,8 +60,7 @@ class Database {
     try {
       console.log("🔄 Initializing database schema...");
 
-      const schemaPath = path.resolve(__dirname, "schema.sql");
-      console.log("📁 Checking for schema.sql at:", schemaPath);
+      const schemaPath = path.join(__dirname, "schema.sql");
 
       if (fs.existsSync(schemaPath)) {
         const schemaSQL = fs.readFileSync(schemaPath, "utf8");
@@ -70,7 +70,7 @@ class Database {
       } else {
         console.error("❌ schema.sql file not found at:", schemaPath);
         throw new Error(
-          "Schema file not found. Make sure src/database/schema.sql is copied into the container."
+          "Schema file not found. Please create express-api/database/schema.sql"
         );
       }
     } catch (error) {
