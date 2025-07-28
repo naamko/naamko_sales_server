@@ -4,22 +4,24 @@ FROM node:23-alpine
 # Set the working directory inside the container
 WORKDIR /app
 
-# Copy package.json and package-lock.json files from express-api directory
+# Copy package.json and package-lock.json from express-api
 COPY express-api/package*.json ./
 
-# Install dependencies and TypeScript tools
+# Install production dependencies and global TypeScript tools
 RUN npm install --production && npm install -g ts-node typescript
 
-# Copy the rest of the application code from express-api directory
-COPY express-api/ ./
+# Copy the source files and config files explicitly to avoid clutter
+COPY express-api/tsconfig.json ./tsconfig.json
+COPY express-api/uploads ./uploads
+COPY express-api/src ./src
 
-# Create uploads directory with proper permissions
+# Ensure the uploads directory exists with correct permissions
 RUN mkdir -p /app/uploads && chmod 777 /app/uploads
 
-# Environment variables will be set via .env file or docker-compose
+# Set environment variables externally (.env or docker-compose)
 
-# Expose port 3000
+# Expose the application port
 EXPOSE 3000
 
-# Start the application with ts-node
+# Start the server with ts-node
 CMD ["npx", "ts-node", "src/server.ts"]
